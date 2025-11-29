@@ -20,23 +20,43 @@ EVENTS = [
 
 DETECTORS = ["H1", "L1"]
 
-API = "https://www.gw-openscience.org/eventapi/json/event/"
+BASE = "https://www.gw-openscience.org/eventapi/json/"
+
+# Cada evento pertenece a un catálogo diferente:
+CATALOGS = {
+    "GW150914": "GWTC-1-confident",
+    "GW151226": "GWTC-1-confident",
+    "GW170104": "GWTC-1-confident",
+    "GW170608": "GWTC-1-confident",
+    "GW170814": "GWTC-1-confident",
+    "GW170729": "GWTC-1-confident",
+    "GW190412": "GWTC-2",
+    "GW190521": "GWTC-2",
+    "GW190814": "GWTC-2",
+    "GW200129": "GWTC-3"
+}
+
 
 def get_losc_url(event, det):
-    url = API + event + "/"
+    cat = CATALOGS[event]
+    url = f"{BASE}{cat}/{event}"
     resp = requests.get(url)
-    data = resp.json()
-    for entry in data[event]["detector"]:
-        if entry["detector"] == det:
-            return entry["frame"]["hdf5"]
-    return None
+    js = resp.json()
+
+    try:
+        strain_list = js["events"][event][det]["strain"]
+        return strain_list[0]["url"]
+    except KeyError:
+        return None
+
 
 def download_file(url, path):
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
         with open(path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
+            for chunk in r.iter_content(8192):
                 f.write(chunk)
+
 
 def butter_highpass(data, fs, cutoff=30, order=4):
     nyq = fs / 2
@@ -44,29 +64,32 @@ def butter_highpass(data, fs, cutoff=30, order=4):
     b, a = butter(order, norm, btype="high")
     return filtfilt(b, a, data)
 
+
 def whiten_manual(ts, fft=4):
     psd = ts.psd(fft)
     interp = psd.interpolate(ts.frequencies)
     return ts / np.sqrt(interp)
 
+
 def process_event(event, det):
     print(f"\n==== {event} — {det} ====")
 
-    losc_url = get_losc_url(event, det)
-    if losc_url is None:
-        print("✖ No se encontró URL LOSC")
+    url = get_losc_url(event, det)
+    if url is None:
+        print(f"✖ No existe strain para {event}/{det}")
         return
 
-    raw_path = os.path.join(RAW_DIR, f"{event}_{det}_raw.hdf5")
+    print("Descargando:", url)
 
-    print("Descargando:", losc_url)
-    download_file(losc_url, raw_path)
-    print("✔ Archivo descargado")
+    raw_path = os.path.join(RAW_DIR, f"{event}_{det}_raw.hdf5")
+    download_file(url, raw_path)
+    print("✔ Raw guardado:", raw_path)
 
     ts = TimeSeries.read(raw_path)
 
     fs = ts.sample_rate.value
     hp = butter_highpass(ts.value, fs)
+
     clean = TimeSeries(hp, times=ts.times)
     clean_path = os.path.join(CLEAN_DIR, f"{event}_{det}_clean.hdf5")
     clean.write(clean_path, path="/")
@@ -77,12 +100,14 @@ def process_event(event, det):
     white.write(proc_path, path="/")
     print("✔ Whitening generado")
 
+
 def run():
     print("\n=== PIPELINE LOSC ===\n")
     for ev in EVENTS:
         for det in DETECTORS:
             process_event(ev, det)
     print("\n=== FIN ===")
+
 
 if __name__ == "__main__":
     run()
