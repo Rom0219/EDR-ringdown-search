@@ -2,7 +2,7 @@ import os
 import numpy as np
 import requests
 from gwpy.timeseries import TimeSeries
-from gwpy.signal.whiten import whiten
+from gwpy.signal.processing import whiten
 from gwosc import datasets
 from scipy.signal import butter, filtfilt
 
@@ -31,9 +31,6 @@ DETECTORS = ["H1", "L1", "V1"]
 # A1 — Obtener GPS estable
 # =============================
 def get_gps(event):
-    """
-    Obtiene el GPS desde la API estable de GWOSC.
-    """
     try:
         url = f"https://www.gw-openscience.org/eventapi/json/event/{event}/"
         r = requests.get(url, timeout=10)
@@ -75,7 +72,7 @@ def download_event(event, det, gps):
         return None
 
 # =============================
-# A3 — Highpass Butterworth
+# A3 — Highpass con Butterworth
 # =============================
 def butter_highpass(data, fs, cutoff=30, order=4):
     nyq = 0.5 * fs
