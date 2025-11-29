@@ -2,9 +2,8 @@ import os
 import numpy as np
 import requests
 from gwpy.timeseries import TimeSeries
-from gwpy.signal.filter_design import whiten
+from gwpy.signal.whiten import whiten
 from gwosc import datasets
-from gwosc.locate import get_urls
 from scipy.signal import butter, filtfilt
 
 # =============================
@@ -29,12 +28,11 @@ EVENTS = [
 DETECTORS = ["H1", "L1", "V1"]
 
 # =============================
-# A1: Obtener GPS confiable desde API estable
+# A1 — Obtener GPS estable
 # =============================
 def get_gps(event):
     """
     Obtiene el GPS desde la API estable de GWOSC.
-    Esta API funciona SIEMPRE.
     """
     try:
         url = f"https://www.gw-openscience.org/eventapi/json/event/{event}/"
@@ -48,7 +46,7 @@ def get_gps(event):
         return None
 
 # =============================
-# A2: Descargar datos reales del detector
+# A2 — Descargar datos reales
 # =============================
 def download_event(event, det, gps):
     try:
@@ -60,7 +58,7 @@ def download_event(event, det, gps):
             print(f"✖ No hay URLs disponibles para {event} [{det}]")
             return None
 
-        url = urls[0]  
+        url = urls[0]
         print("URL:", url)
 
         ts = TimeSeries.read(url, format='hdf5')
@@ -77,7 +75,7 @@ def download_event(event, det, gps):
         return None
 
 # =============================
-# A3: Highpass con Butterworth
+# A3 — Highpass Butterworth
 # =============================
 def butter_highpass(data, fs, cutoff=30, order=4):
     nyq = 0.5 * fs
@@ -86,7 +84,7 @@ def butter_highpass(data, fs, cutoff=30, order=4):
     return filtfilt(b, a, data)
 
 # =============================
-# A4 + A5: Preprocesamiento, whitening y guardado
+# A4 + A5 — Preprocesamiento y Whitening
 # =============================
 def process_event(event, det):
     print(f"\n===============================")
@@ -102,7 +100,6 @@ def process_event(event, det):
     if raw_path is None:
         return
 
-    # Leer datos crudos
     ts_raw = TimeSeries.read(raw_path, format='hdf5')
     fs = int(ts_raw.sample_rate.value)
     t = ts_raw.times.value
@@ -125,7 +122,7 @@ def process_event(event, det):
     print(f"✔ Guardado archivo PROCESSED: {proc_path}")
 
 # =============================
-# EJECUCIÓN PRINCIPAL
+# MÓDULO A COMPLETO
 # =============================
 def run_pipeline():
     print("\n============================================")
