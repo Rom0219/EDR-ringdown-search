@@ -11,9 +11,5 @@
         }
     },
 
-    "features": {
-        "ghcr.io/devcontainers-contrib/features/git:1": {}
-    },
-
     "postCreateCommand": "pip install --upgrade pip && pip install 'gwpy[complete]' numpy scipy matplotlib h5py requests"
 }
