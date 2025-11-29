@@ -1,60 +1,74 @@
-"""
-scripts/download_data.py
-
-Descarga datos de LIGO usando GWPy (método moderno).
-"""
-
 import os
+import h5py
+import requests
 from gwpy.timeseries import TimeSeries
+from gwosc.datasets import event_gps
+from gwosc.api import event_json
 
-# Tabla oficial de tiempos GPS
-GPS_TIMES = {
-    "GW150914": 1126259462.4,
-    "GW151226": 1135136350.6,
-    "GW170104": 1167559936.6,
-    "GW170608": 1180922494.5,
-    "GW170814": 1186741861.5,
-    "GW170729": 1185389807.3,
-    "GW190412": 1239082262.2,
-    "GW190521": 1242442967.4,
-    "GW190814": 1249852257.0,
-    "GW200129": 1264316115.4
-}
+RAW_DIR = "data/raw"
 
-def download_event(event, det, outdir="data/raw"):
+os.makedirs(RAW_DIR, exist_ok=True)
 
-    if event not in GPS_TIMES:
-        print(f"✖ Evento {event} no está en la tabla GPS.")
-        return None
+# ------------------------------------------
+# Obtener URLs reales desde la API moderna
+# ------------------------------------------
+def get_strain_url(event, detector):
+    """
+    Devuelve la URL HDF5 oficial de strain LOSC v1/v2/v3 según GWOSC.
+    """
+    meta = event_json(event)
+    if "strain" not in meta:
+        raise ValueError(f"No hay strain para {event}")
 
-    gps = GPS_TIMES[event]
-    duration = 8  # segundos alrededor del evento
-    start = gps - duration/2
-    end   = gps + duration/2
+    # Filtrar strain del detector correcto
+    for entry in meta["strain"]:
+        if entry["ifo"] == detector:
+            return entry["url"]
 
-    print(f"\nDescargando {event} ({det}) — GPS {gps}")
+    raise ValueError(f"No hay strain para {event}/{detector}")
+
+
+# ------------------------------------------
+# Descargar archivo
+# ------------------------------------------
+def download_strain(event, detector):
+    out_path = f"{RAW_DIR}/{event}_{detector}.hdf5"
+
+    if os.path.exists(out_path):
+        print(f"✓ Ya existe {out_path}")
+        return out_path
 
     try:
-        ts = TimeSeries.fetch_open_data(
-            det,
-            start,
-            end,
-            sample_rate=4096,
-            cache=True,
-            verbose=True
-        )
-
-        # Crear carpeta si no existe
-        os.makedirs(outdir, exist_ok=True)
-
-        # Guardar
-        outpath = os.path.join(outdir, f"{event}_{det}_raw.hdf5")
-        ts.write(outpath)
-        print(f"✔ Guardado en {outpath}")
-
-        return outpath
-
+        print(f"Obteniendo URL oficial para {event}/{detector}...")
+        url = get_strain_url(event, detector)
     except Exception as e:
-        print(f"✖ Error descargando {event} / {det}")
-        print(e)
+        print(f"✖ Error obteniendo URL para {event}/{detector}: {e}")
+        return None
+
+    print(f"Descargando:\n{url}")
+
+    resp = requests.get(url, stream=True)
+    if resp.status_code != 200:
+        print(f"✖ Error HTTP {resp.status_code}")
+        return None
+
+    with open(out_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+
+    print(f"✓ Archivo guardado en {out_path}")
+    return out_path
+
+
+# ------------------------------------------
+# Cargar TimeSeries desde HDF5
+# ------------------------------------------
+def load_strain(path):
+    try:
+        ts = TimeSeries.read(path, format="hdf5.gwosc")
+        print(f"✓ Señal cargada correctamente ({len(ts)} muestras)")
+        return ts
+    except Exception as e:
+        print(f"✖ Error leyendo archivo {path}: {e}")
         return None
