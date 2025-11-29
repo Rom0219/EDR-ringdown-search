@@ -1,7 +1,6 @@
 import os
 from gwpy.timeseries import TimeSeries
 from gwpy.signal.filter_design import bandpass
-from gwpy.signal import whitening
 from matplotlib import pyplot as plt
 
 from scripts.download_data import download_strain, load_strain
@@ -19,7 +18,7 @@ EVENTS = [
     "GW200129",
 ]
 
-DETECTORS = ["H1", "L1"]   # Solo interferómetros que tienen señal
+DETECTORS = ["H1", "L1"]
 
 CLEAN_DIR = "data/clean"
 SPEC_DIR = "output/spectrograms"
@@ -28,9 +27,6 @@ os.makedirs(CLEAN_DIR, exist_ok=True)
 os.makedirs(SPEC_DIR, exist_ok=True)
 
 
-# -------------------------
-# Procesar un evento
-# -------------------------
 def process_event(event, det):
     print(f"\n==== {event} — {det} ====")
 
@@ -45,9 +41,9 @@ def process_event(event, det):
     if ts is None:
         return
 
-    # 3. Bandpass + whitening
+    # 3. Bandpass + Whitening
     ts_bp = ts.bandpass(20, 1000)
-    ts_white = whitening.whiten(ts_bp)
+    ts_white = ts_bp.whiten()  # ← método correcto
 
     # 4. Guardar señal procesada
     out_clean = f"{CLEAN_DIR}/{event}_{det}_white.hdf5"
@@ -56,21 +52,18 @@ def process_event(event, det):
 
     # 5. Generar espectrograma
     out_fig = f"{SPEC_DIR}/{event}_{det}_spectrogram.png"
-    fig = ts_white.spectrogram(fftlength=4, overlap=2).plot(norm="log")
+    sg = ts_white.spectrogram(fftlength=4, overlap=2)
+    fig = sg.plot(norm="log")
     fig.savefig(out_fig)
     plt.close(fig.fig)
     print(f"✓ Espectrograma guardado en {out_fig}")
 
 
-# -------------------------
-# Pipeline principal
-# -------------------------
 def run():
     print("\n=== PIPELINE GWOSC — INICIO ===")
 
     for event in EVENTS:
         print(f"\n>>> EVENTO: {event}")
-
         for det in DETECTORS:
             try:
                 process_event(event, det)
