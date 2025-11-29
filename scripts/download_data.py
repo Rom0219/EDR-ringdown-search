@@ -1,12 +1,10 @@
 """
 scripts/download_data.py
 
-Descarga datos de GWOSC usando GPS ya conocidos (tabla fija).
+Descarga datos de LIGO usando GWPy (método moderno).
 """
 
 import os
-from gwosc.api import fetch_event_json
-from gwosc.datasets import fetch_open_data
 from gwpy.timeseries import TimeSeries
 
 # Tabla oficial de tiempos GPS
@@ -25,27 +23,36 @@ GPS_TIMES = {
 
 def download_event(event, det, outdir="data/raw"):
 
-    # Validar evento
     if event not in GPS_TIMES:
-        print(f"✖ El evento {event} no está en la tabla GPS.")
+        print(f"✖ Evento {event} no está en la tabla GPS.")
         return None
 
     gps = GPS_TIMES[event]
-    duration = 8  # segundos de datos alrededor del evento
-    start = int(gps - duration/2)
-    end   = int(gps + duration/2)
+    duration = 8  # segundos alrededor del evento
+    start = gps - duration/2
+    end   = gps + duration/2
 
     print(f"\nDescargando {event} ({det}) — GPS {gps}")
 
     try:
-        out = fetch_open_data(
-            detector=det,
-            start=start,
-            end=end,
-            outdir=outdir,
+        ts = TimeSeries.fetch_open_data(
+            det,
+            start,
+            end,
+            sample_rate=4096,
+            cache=True,
             verbose=True
         )
-        return out
+
+        # Crear carpeta si no existe
+        os.makedirs(outdir, exist_ok=True)
+
+        # Guardar
+        outpath = os.path.join(outdir, f"{event}_{det}_raw.hdf5")
+        ts.write(outpath)
+        print(f"✔ Guardado en {outpath}")
+
+        return outpath
 
     except Exception as e:
         print(f"✖ Error descargando {event} / {det}")
