@@ -1,5 +1,4 @@
 # Teoría del Espacio Dinámico Rotacional (EDR)
-Validación Numérica Oficial  
 Autor: **Camilo Robinson**
 
 # EDR-QNM-Search
