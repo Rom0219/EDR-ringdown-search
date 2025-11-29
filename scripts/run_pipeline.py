@@ -1,112 +1,83 @@
 import os
-import json
-import requests
 from gwpy.timeseries import TimeSeries
-from scipy.signal import butter, filtfilt
-import numpy as np
+from gwpy.signal.filter_design import bandpass
+from gwpy.signal import whitening
+from matplotlib import pyplot as plt
 
-RAW_DIR = "data/raw"
-CLEAN_DIR = "data/clean"
-PROC_DIR = "data/processed"
-
-for d in [RAW_DIR, CLEAN_DIR, PROC_DIR]:
-    os.makedirs(d, exist_ok=True)
+from scripts.download_data import download_strain, load_strain
 
 EVENTS = [
-    "GW150914", "GW151226", "GW170104", "GW170608",
-    "GW170814", "GW170729", "GW190412", "GW190521",
-    "GW190814", "GW200129"
+    "GW150914",
+    "GW151226",
+    "GW170104",
+    "GW170608",
+    "GW170814",
+    "GW170729",
+    "GW190412",
+    "GW190521",
+    "GW190814",
+    "GW200129",
 ]
 
-DETECTORS = ["H1", "L1"]
+DETECTORS = ["H1", "L1"]   # Solo interferómetros que tienen señal
 
-BASE = "https://www.gw-openscience.org/eventapi/json/"
+CLEAN_DIR = "data/clean"
+SPEC_DIR = "output/spectrograms"
 
-# Cada evento pertenece a un catálogo diferente:
-CATALOGS = {
-    "GW150914": "GWTC-1-confident",
-    "GW151226": "GWTC-1-confident",
-    "GW170104": "GWTC-1-confident",
-    "GW170608": "GWTC-1-confident",
-    "GW170814": "GWTC-1-confident",
-    "GW170729": "GWTC-1-confident",
-    "GW190412": "GWTC-2",
-    "GW190521": "GWTC-2",
-    "GW190814": "GWTC-2",
-    "GW200129": "GWTC-3"
-}
+os.makedirs(CLEAN_DIR, exist_ok=True)
+os.makedirs(SPEC_DIR, exist_ok=True)
 
 
-def get_losc_url(event, det):
-    cat = CATALOGS[event]
-    url = f"{BASE}{cat}/{event}"
-    resp = requests.get(url)
-    js = resp.json()
-
-    try:
-        strain_list = js["events"][event][det]["strain"]
-        return strain_list[0]["url"]
-    except KeyError:
-        return None
-
-
-def download_file(url, path):
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in r.iter_content(8192):
-                f.write(chunk)
-
-
-def butter_highpass(data, fs, cutoff=30, order=4):
-    nyq = fs / 2
-    norm = cutoff / nyq
-    b, a = butter(order, norm, btype="high")
-    return filtfilt(b, a, data)
-
-
-def whiten_manual(ts, fft=4):
-    psd = ts.psd(fft)
-    interp = psd.interpolate(ts.frequencies)
-    return ts / np.sqrt(interp)
-
-
+# -------------------------
+# Procesar un evento
+# -------------------------
 def process_event(event, det):
     print(f"\n==== {event} — {det} ====")
 
-    url = get_losc_url(event, det)
-    if url is None:
-        print(f"✖ No existe strain para {event}/{det}")
+    # 1. Descargar archivo
+    path = download_strain(event, det)
+    if not path:
+        print("✖ No se pudo descargar")
         return
 
-    print("Descargando:", url)
+    # 2. Cargar señal
+    ts = load_strain(path)
+    if ts is None:
+        return
 
-    raw_path = os.path.join(RAW_DIR, f"{event}_{det}_raw.hdf5")
-    download_file(url, raw_path)
-    print("✔ Raw guardado:", raw_path)
+    # 3. Bandpass + whitening
+    ts_bp = ts.bandpass(20, 1000)
+    ts_white = whitening.whiten(ts_bp)
 
-    ts = TimeSeries.read(raw_path)
+    # 4. Guardar señal procesada
+    out_clean = f"{CLEAN_DIR}/{event}_{det}_white.hdf5"
+    ts_white.write(out_clean, format="hdf5")
+    print(f"✓ Señal procesada guardada en {out_clean}")
 
-    fs = ts.sample_rate.value
-    hp = butter_highpass(ts.value, fs)
-
-    clean = TimeSeries(hp, times=ts.times)
-    clean_path = os.path.join(CLEAN_DIR, f"{event}_{det}_clean.hdf5")
-    clean.write(clean_path, path="/")
-    print("✔ Clean generado")
-
-    white = whiten_manual(clean)
-    proc_path = os.path.join(PROC_DIR, f"{event}_{det}_processed.hdf5")
-    white.write(proc_path, path="/")
-    print("✔ Whitening generado")
+    # 5. Generar espectrograma
+    out_fig = f"{SPEC_DIR}/{event}_{det}_spectrogram.png"
+    fig = ts_white.spectrogram(fftlength=4, overlap=2).plot(norm="log")
+    fig.savefig(out_fig)
+    plt.close(fig.fig)
+    print(f"✓ Espectrograma guardado en {out_fig}")
 
 
+# -------------------------
+# Pipeline principal
+# -------------------------
 def run():
-    print("\n=== PIPELINE LOSC ===\n")
-    for ev in EVENTS:
+    print("\n=== PIPELINE GWOSC — INICIO ===")
+
+    for event in EVENTS:
+        print(f"\n>>> EVENTO: {event}")
+
         for det in DETECTORS:
-            process_event(ev, det)
-    print("\n=== FIN ===")
+            try:
+                process_event(event, det)
+            except Exception as e:
+                print(f"✖ Error procesando {event}/{det}: {e}")
+
+    print("\n=== PIPELINE COMPLETO ===")
 
 
 if __name__ == "__main__":
