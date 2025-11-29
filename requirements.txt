@@ -1,11 +1,10 @@
 numpy
 scipy
 matplotlib
+pandas
 gwpy
 gwosc
 pycbc
-astropy
+bilby
 h5py
-pandas
-emcee        # si quieres MCMC for parameter estimation
-bilby        # optional for Bayesian model comparison
+astropy
