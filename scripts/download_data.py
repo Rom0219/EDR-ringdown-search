@@ -1,127 +1,132 @@
-# scripts/download_data.py
-#
-# Descarga y preprocesa strain real de GWOSC usando GWpy,
-# pero hace el blanqueo (whitening) a mano con numpy + scipy
-# para no depender de gwpy.whiten.
-
 import os
-from typing import Tuple
-
 import numpy as np
+from gwpy.timeseries import TimeSeries
 from scipy.signal import welch
 
-from gwpy.timeseries import TimeSeries
-from gwosc.datasets import event_gps
+# ============================================================
+# CONFIG
+# ============================================================
 
-# Carpetas --------------------------------------------------------
+OUT_RAW   = "data/raw"
+OUT_CLEAN = "data/clean"
+OUT_WHITE = "data/white"
 
-BASE = "data"
-RAW_DIR   = os.path.join(BASE, "raw")
-CLEAN_DIR = os.path.join(BASE, "clean")
-WHITE_DIR = os.path.join(BASE, "white")
-
-for d in (RAW_DIR, CLEAN_DIR, WHITE_DIR):
-    os.makedirs(d, exist_ok=True)
-
-
-# ==============================
-# Obtener GPS del evento
-# ==============================
-def get_event_gps(event: str) -> float:
-    gps = event_gps(event)
-    if isinstance(gps, (list, tuple)):
-        gps = gps[0]
-    return float(gps)
+os.makedirs(OUT_RAW, exist_ok=True)
+os.makedirs(OUT_CLEAN, exist_ok=True)
+os.makedirs(OUT_WHITE, exist_ok=True)
 
 
-# ==============================
-# Whitening manual
-# ==============================
-def manual_whiten(ts: TimeSeries, seglen: float = 4.0) -> TimeSeries:
-    data = ts.value
-    dt = ts.dt.value
-    fs = 1.0 / dt
+# ============================================================
+# DESCARGA
+# ============================================================
 
-    # PSD con Welch
-    nperseg = int(seglen * fs)
-    if nperseg > len(data):
-        nperseg = len(data) // 2
-    freqs_psd, psd = welch(data, fs=fs, nperseg=nperseg)
-
-    # FFT
-    freqs_fft = np.fft.rfftfreq(len(data), dt)
-    fft_data = np.fft.rfft(data)
-
-    # Interpolar PSD a freqs FFT
-    psd_interp = np.interp(freqs_fft, freqs_psd, psd)
-    psd_interp = np.where(psd_interp <= 0, np.inf, psd_interp)
-
-    # Whitening
-    fft_white = fft_data / np.sqrt(psd_interp)
-    white_data = np.fft.irfft(fft_white, n=len(data))
-
-    # Nuevo TimeSeries
-    ts_white = TimeSeries(
-        white_data,
-        sample_rate=ts.sample_rate,
-        t0=ts.t0,
-        name="whitened"
-    )
-
-    return ts_white
+def download_strain(event: str, det: str, gps_start: float, gps_end: float):
+    """
+    Descarga datos reales desde GWOSC usando gwpy.fetch_open_data
+    """
+    try:
+        ts = TimeSeries.fetch_open_data(det, gps_start, gps_end, verbose=False)
+        return ts
+    except Exception as e:
+        print(f"✖ Error descargando {event}/{det}: {e}")
+        return None
 
 
-# ==============================
-# Descarga + Preproceso
-# ==============================
-def download_and_preprocess(
-    event: str,
-    det: str,
-    window: float = 8.0,
-    pad: float = 8.0,
-    f_low: float = 20.0,
-    f_high: float = 1024.0,
-) -> Tuple[str, str, str]:
+# ============================================================
+# LIMPIEZA
+# ============================================================
 
-    gps = get_event_gps(event)
-    t0 = int(gps) - int(window // 2)
-    t1 = t0 + int(window)
+def clean_strain(ts: TimeSeries):
+    """
+    Detrend + Bandpass 20–1024 Hz
+    """
+    try:
+        ts2 = ts.detrend("linear")
+        ts3 = ts2.bandpass(20, 1024)
+        return ts3
+    except Exception as e:
+        print("✖ Error en limpieza:", e)
+        return None
 
-    print(f"  GPS = {gps:.3f}")
-    print(f"  Ventana de análisis: [{t0}, {t1}] s")
 
-    # 1) Descargar datos
-    print("  Descargando datos con TimeSeries.fetch_open_data(...)")
-    ts_full = TimeSeries.fetch_open_data(det, t0 - int(pad), t1 + int(pad), cache=True)
+# ============================================================
+# BLANQUEO
+# ============================================================
 
-    # 2) Recorte exacto
-    ts_raw = ts_full.crop(t0, t1)
-    ts_raw.name = "raw"
+def whiten_manual(ts: TimeSeries):
+    """
+    Blanqueo manual usando Welch + FFT (compatible con SciPy actual)
+    """
+    try:
+        fs = ts.sample_rate.value
 
-    # 3) Limpieza
-    print(f"  Limpieza: detrend + bandpass [{f_low}, {f_high}] Hz")
-    ts_clean = ts_raw.detrend("constant").bandpass(f_low, f_high)
-    ts_clean.name = "clean"
+        # PSD por Welch
+        freqs, psd = welch(ts.value, fs=fs, nperseg=4*fs)
 
-    # 4) Whitening manual
-    print("  Blanqueando con método manual (Welch + FFT)")
-    ts_white = manual_whiten(ts_clean)
-    ts_white.name = "white"
+        # FFT
+        ft = np.fft.rfft(ts.value)
+        ft_white = ft / np.sqrt(psd + 1e-12)
 
-    # 5) Guardar archivos
-    base = f"{event}_{det}"
-    raw_path   = os.path.join(RAW_DIR,   f"{base}_raw.hdf5")
-    clean_path = os.path.join(CLEAN_DIR, f"{base}_clean.hdf5")
-    white_path = os.path.join(WHITE_DIR, f"{base}_white.hdf5")
+        white = np.fft.irfft(ft_white, n=len(ts.value))
 
-    # IMPORTANTE → usamos path="strain"
-    print(f"  Guardando RAW   -> {raw_path}")
-    ts_raw.write(raw_path, format="hdf5", path="strain")
+        return TimeSeries(white, sample_rate=ts.sample_rate, t0=ts.t0)
+    except Exception as e:
+        print("✖ Error blanqueando:", e)
+        return None
 
-    print(f"  Guardando CLEAN -> {clean_path}")
-    ts_clean.write(clean_path, format="hdf5", path="strain")
 
-    print(f"  Guardando WHITE -> {white_path}")
-    ts_white.write(white_path, format="hdf5", path="strain")
+# ============================================================
+# GUARDA (con overwrite=True)
+# ============================================================
 
-    return raw_path, clean_path, white_path
+def save_series(ts: TimeSeries, path: str):
+    """
+    Guarda un TimeSeries en formato HDF5, permitiendo overwrite.
+    """
+    try:
+        ts.write(path, format="hdf5", path="strain", overwrite=True)
+    except Exception as e:
+        print(f"✖ Error guardando {path}: {e}")
+
+
+# ============================================================
+# PIPE DE PROCESAMIENTO
+# ============================================================
+
+def process_event(event: str, det: str, gps: float):
+    gps_start = int(gps) - 4
+    gps_end   = int(gps) + 4
+
+    print(f"  GPS = {gps}")
+    print(f"  Ventana = [{gps_start}, {gps_end}]")
+
+    # Descargar
+    ts_raw = download_strain(event, det, gps_start, gps_end)
+    if ts_raw is None:
+        return
+
+    # Limpiar
+    ts_clean = clean_strain(ts_raw)
+    if ts_clean is None:
+        return
+
+    # Blanquear
+    ts_white = whiten_manual(ts_clean)
+    if ts_white is None:
+        return
+
+    # === RUTAS DE SALIDA ===
+    raw_path   = f"{OUT_RAW}/{event}_{det}_raw.hdf5"
+    clean_path = f"{OUT_CLEAN}/{event}_{det}_clean.hdf5"
+    white_path = f"{OUT_WHITE}/{event}_{det}_white.hdf5"
+
+    print(f"  Guardando RAW   → {raw_path}")
+    save_series(ts_raw, raw_path)
+
+    print(f"  Guardando CLEAN → {clean_path}")
+    save_series(ts_clean, clean_path)
+
+    print(f"  Guardando WHITE → {white_path}")
+    save_series(ts_white, white_path)
+
+    print("  ✓ COMPLETADO\n")
