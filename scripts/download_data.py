@@ -1,132 +1,124 @@
-import os
 import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal import welch
+import h5py
+import os
 
-# ============================================================
-# CONFIG
-# ============================================================
+# ======================================================
+# 1) BLANQUEO MANUAL CORREGIDO — IGUAL A COLAB
+# ======================================================
 
-OUT_RAW   = "data/raw"
-OUT_CLEAN = "data/clean"
-OUT_WHITE = "data/white"
-
-os.makedirs(OUT_RAW, exist_ok=True)
-os.makedirs(OUT_CLEAN, exist_ok=True)
-os.makedirs(OUT_WHITE, exist_ok=True)
-
-
-# ============================================================
-# DESCARGA
-# ============================================================
-
-def download_strain(event: str, det: str, gps_start: float, gps_end: float):
+def whiten_manual(strain, fs, fftlength=4.0, overlap=2.0):
     """
-    Descarga datos reales desde GWOSC usando gwpy.fetch_open_data
+    Whitening igual al comportamiento de GWpy:
+    1) FFT de la señal
+    2) PSD con Welch
+    3) Interpolación del PSD a la malla FFT
+    4) División en frecuencia
+    5) Transformada inversa
     """
-    try:
-        ts = TimeSeries.fetch_open_data(det, gps_start, gps_end, verbose=False)
-        return ts
-    except Exception as e:
-        print(f"✖ Error descargando {event}/{det}: {e}")
-        return None
+
+    N = len(strain)
+    freqs = np.fft.rfftfreq(N, 1/fs)
+    fft_data = np.fft.rfft(strain)
+
+    # PSD usando Welch
+    freqs_psd, psd = welch(
+        strain,
+        fs=fs,
+        nperseg=int(fftlength * fs),
+        noverlap=int(overlap * fs)
+    )
+
+    # Interpolación del PSD
+    psd_interp = np.interp(freqs, freqs_psd, psd)
+
+    # Blanqueo
+    white_fft = fft_data / np.sqrt(psd_interp / 2.0)
+
+    # Transformada inversa
+    white_time = np.fft.irfft(white_fft, n=N)
+
+    return white_time
 
 
-# ============================================================
-# LIMPIEZA
-# ============================================================
+# ======================================================
+# 2) GUARDADO SEGURO (evita FileExists)
+# ======================================================
 
-def clean_strain(ts: TimeSeries):
+def save_timeseries_safe(filename, data, fs):
     """
-    Detrend + Bandpass 20–1024 Hz
+    Guarda un vector como HDF5 asegurando compatibilidad con GWpy.
     """
-    try:
-        ts2 = ts.detrend("linear")
-        ts3 = ts2.bandpass(20, 1024)
-        return ts3
-    except Exception as e:
-        print("✖ Error en limpieza:", e)
-        return None
+    folder = os.path.dirname(filename)
+    os.makedirs(folder, exist_ok=True)
+
+    with h5py.File(filename, "w") as f:
+        dset = f.create_dataset("strain", data=data)
+        dset.attrs["fs"] = fs
 
 
-# ============================================================
-# BLANQUEO
-# ============================================================
+# ======================================================
+# 3) DESCARGA + PROCESAMIENTO COMPLETO
+# ======================================================
 
-def whiten_manual(ts: TimeSeries):
+def download_and_preprocess(event_name, detector, gps, t_pre=4, t_post=4,
+                            fmin=20, fmax=1024):
     """
-    Blanqueo manual usando Welch + FFT (compatible con SciPy actual)
+    Descarga de GWOSC con GWpy y procesamiento completo.
     """
-    try:
-        fs = ts.sample_rate.value
-
-        # PSD por Welch
-        freqs, psd = welch(ts.value, fs=fs, nperseg=4*fs)
-
-        # FFT
-        ft = np.fft.rfft(ts.value)
-        ft_white = ft / np.sqrt(psd + 1e-12)
-
-        white = np.fft.irfft(ft_white, n=len(ts.value))
-
-        return TimeSeries(white, sample_rate=ts.sample_rate, t0=ts.t0)
-    except Exception as e:
-        print("✖ Error blanqueando:", e)
-        return None
-
-
-# ============================================================
-# GUARDA (con overwrite=True)
-# ============================================================
-
-def save_series(ts: TimeSeries, path: str):
-    """
-    Guarda un TimeSeries en formato HDF5, permitiendo overwrite.
-    """
-    try:
-        ts.write(path, format="hdf5", path="strain", overwrite=True)
-    except Exception as e:
-        print(f"✖ Error guardando {path}: {e}")
-
-
-# ============================================================
-# PIPE DE PROCESAMIENTO
-# ============================================================
-
-def process_event(event: str, det: str, gps: float):
-    gps_start = int(gps) - 4
-    gps_end   = int(gps) + 4
 
     print(f"  GPS = {gps}")
-    print(f"  Ventana = [{gps_start}, {gps_end}]")
+    t0 = gps - t_pre
+    t1 = gps + t_post
+    print(f"  Ventana = [{t0}, {t1}]")
 
-    # Descargar
-    ts_raw = download_strain(event, det, gps_start, gps_end)
-    if ts_raw is None:
-        return
+    # -----------------------
+    # 1) DESCARGA
+    # -----------------------
+    try:
+        strain = TimeSeries.fetch_open_data(detector, t0, t1, cache=False)
+    except Exception as e:
+        print(f"✖ Error descargando datos: {e}")
+        return None
 
-    # Limpiar
-    ts_clean = clean_strain(ts_raw)
-    if ts_clean is None:
-        return
+    fs = strain.sample_rate.value
 
-    # Blanquear
-    ts_white = whiten_manual(ts_clean)
-    if ts_white is None:
-        return
+    # -----------------------
+    # 2) LIMPIEZA
+    # -----------------------
+    strain_clean = strain.detrend().bandpass(fmin, fmax)
 
-    # === RUTAS DE SALIDA ===
-    raw_path   = f"{OUT_RAW}/{event}_{det}_raw.hdf5"
-    clean_path = f"{OUT_CLEAN}/{event}_{det}_clean.hdf5"
-    white_path = f"{OUT_WHITE}/{event}_{det}_white.hdf5"
+    # -----------------------
+    # 3) BLANQUEO MANUAL
+    # -----------------------
+    try:
+        strain_white = whiten_manual(strain_clean.value, fs)
+    except Exception as e:
+        print(f"✖ Error blanqueando: {e}")
+        return None
 
-    print(f"  Guardando RAW   → {raw_path}")
-    save_series(ts_raw, raw_path)
+    # -----------------------
+    # 4) GUARDADO
+    # -----------------------
 
-    print(f"  Guardando CLEAN → {clean_path}")
-    save_series(ts_clean, clean_path)
+    save_timeseries_safe(
+        f"data/raw/{event_name}_{detector}_raw.hdf5",
+        strain.value,
+        fs
+    )
 
-    print(f"  Guardando WHITE → {white_path}")
-    save_series(ts_white, white_path)
+    save_timeseries_safe(
+        f"data/clean/{event_name}_{detector}_clean.hdf5",
+        strain_clean.value,
+        fs
+    )
 
-    print("  ✓ COMPLETADO\n")
+    save_timeseries_safe(
+        f"data/white/{event_name}_{detector}_white.hdf5",
+        strain_white,
+        fs
+    )
+
+    print("  ✓ Datos procesados y guardados")
+    return strain_white
