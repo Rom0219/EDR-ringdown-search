@@ -1,283 +1,316 @@
 # scripts/run_module_c.py
-"""
-MÓDULO C – Análisis QNM refinado por evento y detector
-------------------------------------------------------
 
-- Usa TimeSeries.fetch_open_data (GWpy + GWOSC) para los 10 eventos.
-- Preprocesa: detrend + bandpass [20, 1024] Hz.
-- Ajusta un modo cuasinormal amortiguado:
-    h(t) = A * exp(-(t - t0)/tau) * cos(2π f (t - t0) + phi)  para t >= t0
-         = 0                                                  para t < t0
-- Resume resultados por evento y detector (H1, L1).
-- Guarda:
-    results/qnm_moduleC_summary.json
-    results/qnm_moduleC_summary.csv
-
-Este módulo NO depende de los .hdf5 de data/, así no rompemos nada de A/B.
-"""
-
-import json
 import os
-import warnings
-from dataclasses import dataclass, asdict
-from typing import Dict, List, Tuple
-
+import json
 import numpy as np
+
 from gwpy.timeseries import TimeSeries
-from scipy.optimize import curve_fit
 from scipy.signal import tukey
+from scipy.fft import rfft, rfftfreq
+from scipy.optimize import curve_fit
 
-
-# -------------------------------------------------------------------
-# 1. Configuración básica: eventos, GPS y detectores
-# -------------------------------------------------------------------
-
-# GPS centrales que ya confirmamos en el pipeline (Módulo A)
-EVENT_GPS = {
-    "GW150914": 1126259462.4,
-    "GW151226": 1135136350.6,
-    "GW170104": 1167559936.6,
-    "GW170608": 1180922494.5,
-    "GW170814": 1186741861.5,
-    "GW170729": 1185389807.3,
-    "GW170823": 1187529256.5,
-    "GW190412": 1239082262.1,
-    "GW190521": 1242442967.4,
-    "GW190814": 1249852257.0,
-}
+EVENTS = [
+    "GW150914",
+    "GW151226",
+    "GW170104",
+    "GW170608",
+    "GW170814",
+    "GW170729",
+    "GW170823",
+    "GW190412",
+    "GW190521",
+    "GW190814",
+]
 
 DETECTORS = ["H1", "L1"]
 
-# Ventana total alrededor del evento (en segundos)
-DT = 8.0  # 4 s antes, 4 s después
-# Ventana de ajuste de ringdown (relativa al GPS)
-RING_T_START = 0.003   # 3 ms después del GPS
-RING_T_END = 0.050     # 50 ms después del GPS (se puede ajustar)
+RESULTS_DIR = "results"
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
-# -------------------------------------------------------------------
-# 2. Estructuras de datos
-# -------------------------------------------------------------------
-
-@dataclass
-class QNMFitResult:
-    event: str
-    detector: str
-    f_Hz: float
-    tau_s: float
-    A: float
-    phi: float
-    t0_rel: float
-    success: bool
-    message: str
+def load_events_metadata(json_path="events.json"):
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    return data
 
 
-# -------------------------------------------------------------------
-# 3. Funciones de modelo y preprocesado
-# -------------------------------------------------------------------
-
-def damped_sinusoid(t: np.ndarray,
-                    A: float,
-                    f: float,
-                    tau: float,
-                    phi: float,
-                    t0: float) -> np.ndarray:
+def damped_sinusoid(t, A, f, tau, phi):
     """
-    Modo cuasinormal amortiguado activado en t >= t0.
-
-    h(t) = A * e^{-(t - t0)/tau} * cos(2π f (t - t0) + phi)   (t >= t0)
-         = 0                                                  (t < t0)
+    h(t) = A exp(-t/tau) cos(2π f t + phi)
+    t asumido en segundos, relativo al inicio del ringdown.
     """
-    x = t - t0
-    # Anulamos antes de t0 para que el ajuste se enfoque en el ringdown
-    mask = x >= 0.0
-    y = np.zeros_like(t)
-    if tau <= 0:
-        return y
-    y[mask] = A * np.exp(-x[mask] / tau) * np.cos(2 * np.pi * f * x[mask] + phi)
-    return y
+    return A * np.exp(-t / tau) * np.cos(2 * np.pi * f * t + phi)
 
 
-def fetch_and_preprocess(event: str,
-                         det: str,
-                         dt: float = DT,
-                         fmin: float = 20.0,
-                         fmax: float = 1024.0) -> Tuple[np.ndarray, np.ndarray]:
+def load_white_strain(event, det):
     """
-    Descarga y preprocesa el strain del detector para un evento:
-    - TimeSeries.fetch_open_data
-    - detrend(linear)
-    - bandpass
-    - ventana de Tukey suave en los bordes
-    Devuelve:
-        t_rel: tiempos en segundos relativos al GPS (0 en el GPS)
-        h:     strain preprocesado
+    Carga el strain blanqueado generado en el Módulo A.
+    Intenta leer como HDF5 de gwpy.
     """
-    gps = EVENT_GPS[event]
-    t0 = gps - dt / 2.0
-    t1 = gps + dt / 2.0
+    fname = os.path.join("data", "white", f"{event}_{det}_white.hdf5")
+    if not os.path.exists(fname):
+        raise FileNotFoundError(f"White file not found: {fname}")
 
-    # GWpy ya está funcionando bien en tu entorno
-    ts = TimeSeries.fetch_open_data(det, t0, t1, cache=True)
-    ts = ts.detrend("linear").bandpass(fmin, fmax)
-
-    # Ventana de Tukey para evitar bordes feos
-    w = tukey(len(ts), alpha=0.1)
-    h = ts.value * w
-
-    # Convertimos tiempos a segundos relativos al GPS
-    t_rel = ts.times.value - gps
-
-    return t_rel, h
+    # Gwpy suele auto-detectar el formato
+    ts = TimeSeries.read(fname)
+    return ts
 
 
-def fit_qnm_for_event_det(event: str, det: str) -> QNMFitResult:
+def estimate_initial_params(t, h):
     """
-    Ajusta un modo QNM a la señal de un evento/detector.
-    Usa una ventana corta después del GPS (ringdown).
+    Estima f0 y tau iniciales a partir de un segmento de ringdown.
+    t: array (s), relativo al inicio del segmento (t=0 en el primer punto).
+    h: array strain (whitened).
     """
-    try:
-        t_rel, h = fetch_and_preprocess(event, det)
-    except Exception as e:
-        return QNMFitResult(
-            event=event,
-            detector=det,
-            f_Hz=np.nan,
-            tau_s=np.nan,
-            A=np.nan,
-            phi=np.nan,
-            t0_rel=np.nan,
-            success=False,
-            message=f"Error descargando/preprocesando: {e}",
-        )
 
-    # Seleccionamos sólo la parte de ringdown
-    mask = (t_rel >= RING_T_START) & (t_rel <= RING_T_END)
-    t_fit = t_rel[mask]
-    h_fit = h[mask]
+    # Ventana suave para evitar artefactos
+    window = tukey(len(h), alpha=0.2)
+    h_win = h * window
 
-    if len(t_fit) < 10:
-        return QNMFitResult(
-            event=event,
-            detector=det,
-            f_Hz=np.nan,
-            tau_s=np.nan,
-            A=np.nan,
-            phi=np.nan,
-            t0_rel=np.nan,
-            success=False,
-            message="Muy pocos puntos en ventana de ringdown",
-        )
+    # === Estimar frecuencia con FFT ===
+    dt = float(t[1] - t[0])
+    freqs = rfftfreq(len(h), dt)
+    H = np.abs(rfft(h_win))
 
-    # Estimaciones iniciales razonables
-    A0 = float(np.max(np.abs(h_fit)) or 1e-22)
-    f0 = 1500.0       # Hz, valor típico ~1–2 kHz
-    tau0 = 0.01       # s
+    # Solo buscamos entre 100 Hz y 3000 Hz
+    fmin, fmax = 100.0, 3000.0
+    band = (freqs >= fmin) & (freqs <= fmax)
+    if not np.any(band):
+        f0 = 1500.0
+    else:
+        idx_peak = np.argmax(H[band])
+        f0 = float(freqs[band][idx_peak])
+
+    # === Estimar tau con ajuste exponencial al envolvente ===
+    env = np.abs(h)
+    # Evitar ceros
+    env = np.where(env <= 1e-24, 1e-24, env)
+
+    # Usamos solo la parte donde el envolvente es relativamente grande
+    env_max = float(env.max())
+    mask_env = env > (0.1 * env_max)
+    t_env = t[mask_env]
+    env_sel = env[mask_env]
+
+    if len(t_env) < 10:
+        tau0 = 0.01
+    else:
+        log_env = np.log(env_sel)
+        # Ajuste lineal: log(env) ~ a + b t -> tau ~ -1/b si b<0
+        a, b = np.polyfit(t_env, log_env, 1)
+        if b < 0:
+            tau0 = float(-1.0 / b)
+        else:
+            tau0 = 0.01
+
+    # Amplitud inicial
+    A0 = float(env_max)
     phi0 = 0.0
-    t00 = RING_T_START
 
-    p0 = (A0, f0, tau0, phi0, t00)
+    return A0, f0, tau0, phi0
 
-    # Límites amplios pero físicos
+
+def fit_qnm(ts_white, gps, event, det):
+    """
+    Ajusta un modo QNM sobre el ringdown usando:
+      - búsqueda automática de pico alrededor del merger
+      - estimación inicial de f, tau
+      - curve_fit para refinar
+    """
+
+    # Tiempo absoluto en GPS y strain
+    t_abs = ts_white.times.value  # GPS
+    h = ts_white.value
+
+    # Tiempo relativo al merger
+    t = t_abs - gps
+
+    # 1) Buscamos el pico alrededor de t ~ 0 (merger)
+    #    Primero en una ventana pequeña, si no hay suficiente, la ampliamos.
+    def find_peak_window(t, h, tmin, tmax):
+        mask = (t >= tmin) & (t <= tmax)
+        if np.sum(mask) < 10:
+            return None, None, None
+        h_seg = h[mask]
+        t_seg = t[mask]
+        idx_peak = np.argmax(np.abs(h_seg))
+        return t_seg[idx_peak], t_seg, h_seg
+
+    t_peak, t_seg, h_seg = find_peak_window(t, h, -0.02, 0.02)
+    if t_peak is None:
+        # Ampliar a [-0.05, 0.05]
+        t_peak, t_seg, h_seg = find_peak_window(t, h, -0.05, 0.05)
+    if t_peak is None:
+        raise RuntimeError("No se pudo localizar un pico claro de ringdown.")
+
+    # 2) Definimos la ventana de ringdown desde el pico hacia adelante
+    T_fit = 0.08  # 80 ms de ringdown
+    mask_fit = (t >= t_peak) & (t <= t_peak + T_fit)
+    if np.sum(mask_fit) < 30:
+        raise RuntimeError("Segmento de ringdown demasiado corto para ajuste.")
+
+    t_fit_abs = t[mask_fit]
+    h_fit = h[mask_fit]
+    # t relativo al inicio del ringdown (para que t=0 sea el pico)
+    t_fit = t_fit_abs - t_fit_abs[0]
+
+    # 3) Estimar parámetros iniciales
+    A0, f0, tau0, phi0 = estimate_initial_params(t_fit, h_fit)
+
+    # 4) Ajuste no lineal con bounds razonables
+    #    Amplitud positiva, tau entre 0.0001 y 1s, frecuencia entre 100 y 5000 Hz
+    A_max = max(A0 * 10.0, 1e-6)
+
+    p0 = [A0, f0, tau0, phi0]
     bounds = (
-        [0.0, 100.0, 1e-4, -2 * np.pi, RING_T_START - 0.005],
-        [np.inf, 4000.0, 1.0, 2 * np.pi, RING_T_START + 0.01],
+        [0.0, 100.0, 1e-4, -2.0 * np.pi],
+        [A_max, 5000.0, 1.0, 2.0 * np.pi],
     )
 
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            popt, pcov = curve_fit(
-                damped_sinusoid,
-                t_fit,
-                h_fit,
-                p0=p0,
-                bounds=bounds,
-                maxfev=20000,
-            )
-        A, f, tau, phi, t0 = [float(x) for x in popt]
+        popt, pcov = curve_fit(
+            damped_sinusoid,
+            t_fit,
+            h_fit,
+            p0=p0,
+            bounds=bounds,
+            maxfev=20000,
+        )
+        A_best, f_best, tau_best, phi_best = popt
 
-        msg = "OK"
-        success = True
+        # Calculamos un chi2 simple (RMS del residuo)
+        model = damped_sinusoid(t_fit, *popt)
+        resid = h_fit - model
+        chi2 = float(np.mean(resid**2))
+
+        return {
+            "event": event,
+            "det": det,
+            "f_qnm": float(f_best),
+            "tau": float(tau_best),
+            "A": float(A_best),
+            "phi": float(phi_best),
+            "t_peak_rel": float(t_peak),
+            "chi2": chi2,
+            "ok": True,
+            "message": "OK",
+        }
 
     except Exception as e:
-        A = f = tau = phi = t0 = np.nan
-        msg = f"Error en ajuste: {e}"
-        success = False
+        return {
+            "event": event,
+            "det": det,
+            "f_qnm": np.nan,
+            "tau": np.nan,
+            "A": np.nan,
+            "phi": np.nan,
+            "t_peak_rel": float(t_peak),
+            "chi2": np.nan,
+            "ok": False,
+            "message": f"Error en ajuste: {e}",
+        }
 
-    return QNMFitResult(
-        event=event,
-        detector=det,
-        f_Hz=f,
-        tau_s=tau,
-        A=A,
-        phi=phi,
-        t0_rel=t0,
-        success=success,
-        message=msg,
+
+def main():
+    events_meta = load_events_metadata()
+    rows = []
+
+    print("=== MÓDULO C – AJUSTE QNM DETALLADO (versión B PRO) ===\n")
+    print(
+        "EVENTO     DET   f_QNM [Hz]      tau [s]       chi2        OK?  MENSAJE\n"
+        "--------------------------------------------------------------------------"
     )
 
-
-# -------------------------------------------------------------------
-# 4. Ejecución del Módulo C
-# -------------------------------------------------------------------
-
-def run_module_c() -> List[QNMFitResult]:
-    """
-    Ejecuta el Módulo C para todos los eventos y detectores.
-    Imprime una tabla en consola y guarda JSON/CSV.
-    """
-    results: List[QNMFitResult] = []
-
-    print("=== MÓDULO C – AJUSTE QNM DETALLADO ===\n")
-    print("EVENTO     DET   f_QNM [Hz]      tau [s]      OK?  MENSAJE")
-    print("---------------------------------------------------------------")
-
-    for ev, gps in EVENT_GPS.items():
+    for ev in EVENTS:
+        gps = float(events_meta[ev]["gps"])
         print(f"\n>>> EVENTO: {ev} (GPS = {gps:.3f})")
         for det in DETECTORS:
-            fit = fit_qnm_for_event_det(ev, det)
-            results.append(fit)
+            try:
+                ts_white = load_white_strain(ev, det)
+                result = fit_qnm(ts_white, gps, ev, det)
+            except Exception as e:
+                result = {
+                    "event": ev,
+                    "det": det,
+                    "f_qnm": np.nan,
+                    "tau": np.nan,
+                    "A": np.nan,
+                    "phi": np.nan,
+                    "t_peak_rel": np.nan,
+                    "chi2": np.nan,
+                    "ok": False,
+                    "message": f"Falló antes del ajuste: {e}",
+                }
 
-            ok_str = "YES" if fit.success else " NO"
-            f_str = f"{fit.f_Hz:10.2f}" if np.isfinite(fit.f_Hz) else "   nan"
-            tau_str = f"{fit.tau_s:10.4f}" if np.isfinite(fit.tau_s) else "     nan"
+            rows.append(result)
+
+            f_str = (
+                f"{result['f_qnm']:10.2f}"
+                if np.isfinite(result["f_qnm"])
+                else "    nan   "
+            )
+            tau_str = (
+                f"{result['tau']:10.4f}"
+                if np.isfinite(result["tau"])
+                else "   nan   "
+            )
+            chi2_str = (
+                f"{result['chi2']:10.3e}"
+                if np.isfinite(result["chi2"])
+                else "   nan    "
+            )
+            ok_str = "YES" if result["ok"] else " NO"
 
             print(
-                f"{ev:9s}  {det:2s}  {f_str}   {tau_str}   {ok_str}  {fit.message[:60]}"
+                f"{ev:9s} {det:3s} {f_str}  {tau_str}  {chi2_str}  {ok_str}  {result['message']}"
             )
 
-    # Crear carpeta de resultados si no existe
-    os.makedirs("results", exist_ok=True)
+    # Guardar resultados en JSON y CSV
+    json_path = os.path.join(RESULTS_DIR, "qnm_moduleC_summary.json")
+    csv_path = os.path.join(RESULTS_DIR, "qnm_moduleC_summary.csv")
 
-    # Guardar JSON
-    json_path = os.path.join("results", "qnm_moduleC_summary.json")
     with open(json_path, "w") as f:
-        json.dump([asdict(r) for r in results], f, indent=2)
+        json.dump(rows, f, indent=2)
 
-    # Guardar CSV simple
-    csv_path = os.path.join("results", "qnm_moduleC_summary.csv")
-    with open(csv_path, "w") as f:
-        f.write(
-            "event,detector,f_Hz,tau_s,A,phi,t0_rel,success,message\n"
+    # CSV sencillo
+    import csv
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "event",
+                "det",
+                "f_qnm_Hz",
+                "tau_s",
+                "A",
+                "phi_rad",
+                "t_peak_rel_s",
+                "chi2",
+                "ok",
+                "message",
+            ]
         )
-        for r in results:
-            f.write(
-                f"{r.event},{r.detector},"
-                f"{r.f_Hz if np.isfinite(r.f_Hz) else ''},"
-                f"{r.tau_s if np.isfinite(r.tau_s) else ''},"
-                f"{r.A if np.isfinite(r.A) else ''},"
-                f"{r.phi if np.isfinite(r.phi) else ''},"
-                f"{r.t0_rel if np.isfinite(r.t0_rel) else ''},"
-                f"{int(r.success)},\"{r.message}\"\n"
+        for r in rows:
+            writer.writerow(
+                [
+                    r["event"],
+                    r["det"],
+                    r["f_qnm"],
+                    r["tau"],
+                    r["A"],
+                    r["phi"],
+                    r["t_peak_rel"],
+                    r["chi2"],
+                    r["ok"],
+                    r["message"],
+                ]
             )
 
     print("\n=== MÓDULO C – COMPLETADO ===")
     print(f"Resumen JSON: {json_path}")
     print(f"Resumen CSV : {csv_path}")
 
-    return results
-
 
 if __name__ == "__main__":
-    run_module_c()
+    main()
