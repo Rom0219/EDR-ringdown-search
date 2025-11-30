@@ -1,54 +1,61 @@
+import os
 import numpy as np
 from gwpy.timeseries import TimeSeries
 from scipy.signal import welch
 import h5py
-import os
 
 # ======================================================
-# 1) BLANQUEO MANUAL CORREGIDO — IGUAL A COLAB
+# 1) BLANQUEO MANUAL CORREGIDO — ESTABLE (LIGO-LIKE)
 # ======================================================
 
-def whiten_manual(strain, fs, fftlength=4.0, overlap=2.0):
+def whiten_manual(strain, fs, seglen=4):
     """
-    Whitening igual al comportamiento de GWpy:
-    1) FFT de la señal
-    2) PSD con Welch
-    3) Interpolación del PSD a la malla FFT
-    4) División en frecuencia
-    5) Transformada inversa
+    Whitening robusto estilo LIGO:
+    - PSD con Welch
+    - FFT
+    - División por sqrt(PSD/2)
+    - iFFT
     """
 
     N = len(strain)
-    freqs = np.fft.rfftfreq(N, 1/fs)
+    dt = 1.0 / fs
+
+    # FFT
+    freq = np.fft.rfftfreq(N, dt)
     fft_data = np.fft.rfft(strain)
 
-    # PSD usando Welch
+    # PSD Welch
+    nperseg = int(seglen * fs)
     freqs_psd, psd = welch(
         strain,
         fs=fs,
-        nperseg=int(fftlength * fs),
-        noverlap=int(overlap * fs)
+        nperseg=nperseg,
+        noverlap=nperseg // 2,
     )
 
-    # Interpolación del PSD
-    psd_interp = np.interp(freqs, freqs_psd, psd)
+    # evitar ceros
+    psd = np.where(psd <= 1e-30, 1e-30, psd)
 
-    # Blanqueo
+    # interpolar PSD al grid FFT
+    psd_interp = np.interp(freq, freqs_psd, psd)
+
+    # whitening correcto
     white_fft = fft_data / np.sqrt(psd_interp / 2.0)
 
-    # Transformada inversa
-    white_time = np.fft.irfft(white_fft, n=N)
+    # señal whitened
+    white = np.fft.irfft(white_fft, n=N)
 
-    return white_time
+    return white
 
 
 # ======================================================
-# 2) GUARDADO SEGURO (evita FileExists)
+# 2) GUARDADO SEGURO (HDF5 compatible con GWpy)
 # ======================================================
 
 def save_timeseries_safe(filename, data, fs):
     """
-    Guarda un vector como HDF5 asegurando compatibilidad con GWpy.
+    Guarda un vector como HDF5 con atributos fs.
+    Compatible con nuestra lectura manual.
     """
     folder = os.path.dirname(filename)
     os.makedirs(folder, exist_ok=True)
@@ -62,7 +69,8 @@ def save_timeseries_safe(filename, data, fs):
 # 3) DESCARGA + PROCESAMIENTO COMPLETO
 # ======================================================
 
-def download_and_preprocess(event_name, detector, gps, t_pre=4, t_post=4,
+def download_and_preprocess(event_name, detector, gps,
+                            t_pre=4, t_post=4,
                             fmin=20, fmax=1024):
     """
     Descarga de GWOSC con GWpy y procesamiento completo.
@@ -104,21 +112,19 @@ def download_and_preprocess(event_name, detector, gps, t_pre=4, t_post=4,
 
     save_timeseries_safe(
         f"data/raw/{event_name}_{detector}_raw.hdf5",
-        strain.value,
-        fs
+        strain.value, fs
     )
 
     save_timeseries_safe(
         f"data/clean/{event_name}_{detector}_clean.hdf5",
-        strain_clean.value,
-        fs
+        strain_clean.value, fs
     )
 
     save_timeseries_safe(
         f"data/white/{event_name}_{detector}_white.hdf5",
-        strain_white,
-        fs
+        strain_white, fs
     )
 
     print("  ✓ Datos procesados y guardados")
+
     return strain_white

@@ -1,21 +1,21 @@
-event,det,f_qnm_Hz,tau_s,A,phi_rad,t_peak_rel_s,chi2,ok,message
-GW150914,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW150914,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW151226,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW151226,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170104,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170104,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170608,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170608,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170814,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170814,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170729,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170729,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170823,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW170823,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW190412,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW190412,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW190521,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW190521,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW190814,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
-GW190814,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: Array.__new__() got an unexpected keyword argument 'fs'
+event,det,f_qnm,tau,A,phi,t_peak,chi2,ok,message
+GW150914,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW150914,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW151226,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW151226,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170104,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170104,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170608,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170608,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170814,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170814,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170729,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170729,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170823,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW170823,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW190412,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW190412,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW190521,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW190521,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW190814,H1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
+GW190814,L1,nan,nan,nan,nan,nan,nan,False,Falló antes del ajuste: No se pudo localizar un pico claro de ringdown.
