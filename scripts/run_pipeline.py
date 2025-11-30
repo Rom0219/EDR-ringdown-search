@@ -1,45 +1,44 @@
-# scripts/run_pipeline.py
-#
-# Pipeline mínimo: descarga y preprocesa strain real de 10 eventos
-# usando sólo GWOSC + GWpy (fetch_open_data).
+import os
+from scripts.download_data import process_event
 
-from scripts.download_data import download_and_preprocess
+# ============================================
+# EVENTOS (GPS oficiales GWOSC)
+# ============================================
 
-# 10 eventos que queremos analizar
-EVENTS = [
-    "GW150914",
-    "GW151226",
-    "GW170104",
-    "GW170608",
-    "GW170814",
-    "GW170729",
-    "GW170823",
-    "GW190412",
-    "GW190521",
-    "GW190814",
-]
+EVENTS = {
+    "GW150914": 1126259462.4,
+    "GW151226": 1135136350.6,
+    "GW170104": 1167559936.6,
+    "GW170608": 1180922494.5,
+    "GW170814": 1186741861.5,
+    "GW170729": 1185389807.3,
+    "GW170823": 1187529256.5,
+    "GW190412": 1239082262.1,
+    "GW190521": 1242442967.4,
+    "GW190814": 1249852257.0,
+}
 
-DETECTORS = ["H1", "L1"]  # Hanford y Livingston
+DETECTORS = ["H1", "L1"]
 
 
-def main() -> None:
+# ============================================
+# MAIN PIPELINE
+# ============================================
+
+def run():
     print("=== PIPELINE GWOSC + GWpy (fetch_open_data) ===\n")
 
-    for event in EVENTS:
-        print(f">>> EVENTO: {event}")
+    for event, gps in EVENTS.items():
+        print(f">>> EVENTO: {event}\n")
+
         for det in DETECTORS:
-            print(f"\n===== {event} — {det} =====")
-            try:
-                raw_path, clean_path, white_path = download_and_preprocess(event, det)
-                print("  ✔ Descarga y preprocesado completados.")
-                print(f"    RAW   : {raw_path}")
-                print(f"    CLEAN : {clean_path}")
-                print(f"    WHITE : {white_path}")
-            except Exception as e:
-                print(f"  ✖ Error procesando {event}/{det}: {e}")
+            print(f"===== {event} — {det} =====")
+            process_event(event, det, gps)
 
     print("\n=== PIPELINE COMPLETO ===")
 
 
+# ============================================
+
 if __name__ == "__main__":
-    main()
+    run()
