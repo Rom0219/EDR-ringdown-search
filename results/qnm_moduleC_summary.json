@@ -2,181 +2,181 @@
   {
     "event": "GW150914",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 996.5837025327202,
+    "tau": 0.6569694461368394,
+    "chi2": 4.3698950263657296e-11,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW150914",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 515.8847619992514,
+    "tau": 0.9999999999987157,
+    "chi2": 4.0697492740360587e-10,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW151226",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 994.7540188141728,
+    "tau": 0.1557862211384319,
+    "chi2": 2.112079006871497e-11,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW151226",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 514.2682676782796,
+    "tau": 0.08118748390980933,
+    "chi2": 1.8228423331783412e-10,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170104",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1009.605623625341,
+    "tau": 0.600139415430329,
+    "chi2": 6.81272480455652e-12,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170104",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1023.0230878766192,
+    "tau": 0.4644357602688409,
+    "chi2": 7.736215232731716e-11,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170608",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1006.1071348994248,
+    "tau": 0.21236332896048038,
+    "chi2": 6.051058633254544e-09,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170608",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 511.7673825480961,
+    "tau": 0.6560979351650702,
+    "chi2": 2.5425001772471156e-13,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170814",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 995.1693148882382,
+    "tau": 0.3269579962596134,
+    "chi2": 4.669189866100336e-11,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170814",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 499.07898213049725,
+    "tau": 0.03593343690077968,
+    "chi2": 1.654006272898868e-12,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170729",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1005.5966726527828,
+    "tau": 0.9999999999999941,
+    "chi2": 3.8113357349981636e-10,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170729",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 526.1014622754223,
+    "tau": 0.09994475478519027,
+    "chi2": 1.1401228360985439e-11,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170823",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 995.8101448043249,
+    "tau": 0.13371156217337962,
+    "chi2": 1.7166085133006997e-10,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW170823",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 499.00720229454305,
+    "tau": 0.02967322378869066,
+    "chi2": 6.793850110671011e-12,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW190412",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 998.5603523391309,
+    "tau": 0.9606946967088408,
+    "chi2": 3.941756603963716e-12,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW190412",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 516.1214507912863,
+    "tau": 0.109663776658408,
+    "chi2": 4.3239216112019334e-13,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW190521",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1083.6815323959784,
+    "tau": 0.0015570439137296103,
+    "chi2": 6.933083870672025e-11,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW190521",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1025.6650406504066,
+    "tau": 0.06806154422069588,
+    "chi2": 3.010422107475971e-13,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW190814",
     "det": "H1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 999.224760925801,
+    "tau": 0.9999999999999999,
+    "chi2": 9.28568947365622e-10,
+    "ok": true,
+    "message": "OK"
   },
   {
     "event": "GW190814",
     "det": "L1",
-    "f_qnm": null,
-    "tau": null,
-    "chi2": null,
-    "ok": false,
-    "message": "No se pudo localizar un pico claro de ringdown."
+    "f_qnm": 1024.719038036835,
+    "tau": 0.4323434055921006,
+    "chi2": 3.0476810908856654e-13,
+    "ok": true,
+    "message": "OK"
   }
 ]

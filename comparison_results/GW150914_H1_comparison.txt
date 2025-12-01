@@ -1,0 +1,19 @@
+COMPARACIÓN GR vs EDR
+Evento: GW150914
+Detector: H1
+
+--- GR ---
+logL_GR = -16646.977780
+AIC_GR  = 33303.955559
+BIC_GR  = 33345.941598
+
+--- EDR ---
+logL_EDR = -16646.983805
+AIC_EDR  = 33303.967610
+BIC_EDR  = 33345.953649
+
+Likelihood Ratio = -0.012051
+ΔBIC = -0.012051
+Bayes Factor = 0.993993
+
+Modelo favorecido: GR preferido
